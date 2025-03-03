@@ -14,7 +14,7 @@ nest_asyncio.apply()
 main_url = "https://rsa.ed.gov/data/view-submission-rsa-17"
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36'}
 
-column_header = columns = [
+column_header = [
     'URL',
     'Financial Management Specialist Contact',
     'Financial Management Specialist Phone',
