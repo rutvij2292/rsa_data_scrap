@@ -335,43 +335,59 @@ def getEverythingInARowForFY2024(data):
     return rowData
 
 
-async def fetch_url(url, headers, isForFY2024=False):
+async def fetch_url(session, url, headers, isForFY2024=False):
     try:
-        async with ClientSession(
-                connector=aiohttp.TCPConnector(ssl=False)) as session:
-            async with session.get(url, headers=headers) as response:
-                content = await response.text()
-                soup = BeautifulSoup(content, 'html.parser')
-                fieldsets = soup.find_all('fieldset')
-                details = soup.find_all('details')
-                if details:
-                    details_data = details[0]
-                    if (isForFY2024):
-                        data = extractAndSetFormattedDataForFY2024(details_data,
-                                                                   fieldsets)
-                        formatted_data = getEverythingInARowForFY2024(data)
-                    else:
-                        data = extractAndSetFormattedData(details_data,
-                                                          fieldsets)
-                        formatted_data = getEverythingInARow(data)
-
-                    custom_data = [url]
-                    custom_data = custom_data + formatted_data[0:]
-                    return custom_data
+        async with session.get(url, headers=headers) as response:
+            content = await response.text()
+            soup = BeautifulSoup(content, 'html.parser')
+            fieldsets = soup.find_all('fieldset')
+            details = soup.find_all('details')
+            if details:
+                details_data = details[0]
+                if (isForFY2024):
+                    data = extractAndSetFormattedDataForFY2024(details_data,
+                                                               fieldsets)
+                    formatted_data = getEverythingInARowForFY2024(data)
                 else:
-                    print(f"No 'details' element found on {url}")
-                    return None
+                    data = extractAndSetFormattedData(details_data, fieldsets)
+                    formatted_data = getEverythingInARow(data)
+
+                custom_data = [url]
+                custom_data = custom_data + formatted_data[0:]
+                return custom_data
+            else:
+                print(f"No 'details' element found on {url}")
+                return None
     except Exception as e:
         print(f"Error fetching {url}: {str(e)}")
         return None
 
 
-async def process_links(urls, headers, isForFY2024=False):
-    tasks = [fetch_url(url, headers, isForFY2024) for url in urls]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    return [result for result in results if
-            result is not None and result != Exception]
+async def process_links(urls, headers, isForFY2024=False, limit=10):
+    connector = aiohttp.TCPConnector(ssl=False)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        semaphore = asyncio.Semaphore(limit)
+        tasks = []
+        for url in urls:
+            async with semaphore:
+                task = asyncio.create_task(
+                    fetch_url(session, url, headers, isForFY2024))
+                tasks.append(task)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return [result for result in results if result is not None]
 
+
+async def main(parsedSummaryData, headers, isForFy2024, limit):
+    records = []
+    processTasks = []
+    for i in range(0, math.ceil(len(parsedSummaryData['Link']) / limit)):
+        task = asyncio.create_task(
+            process_links(parsedSummaryData['Link'][i:((i + 1) * limit)],
+                          headers, isForFy2024, limit))
+        processTasks.append(task)
+
+    records = await asyncio.gather(*processTasks, return_exceptions=True)
+    return [record for record in records if record is not None]
 
 def get_event_loop():
     """
@@ -413,19 +429,17 @@ if st.button("Fetch Data"):
     parsedSummaryData = parseDetailsAndPutInSeparateExcel(url)
     st.dataframe(data=parsedSummaryData)
 
-    data = []
-    limit = 250
-
     loop = get_event_loop()
     try:
         # Ensure the loop is running
         asyncio.set_event_loop(loop)
         isForFy2024 = option == 2024
+        limit = 10
 
-        for i in range(0, math.ceil(len(parsedSummaryData['Link']) / limit)):
-            formatted_data_list = loop.run_until_complete(
-                process_links(parsedSummaryData['Link'][i:((i + 1) * limit)], headers, isForFy2024))
-            data = data + formatted_data_list
+        data = []
+        formatted_data = asyncio.run(main(parsedSummaryData, headers, isForFy2024, limit))
+        for records in formatted_data:
+            data = data + records
 
         test_df = pd.DataFrame(data)
 
