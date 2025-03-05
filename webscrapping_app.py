@@ -434,7 +434,7 @@ if st.button("Fetch Data"):
         # Ensure the loop is running
         asyncio.set_event_loop(loop)
         isForFy2024 = option == 2024
-        limit = 10
+        limit = 50
 
         data = []
         formatted_data = asyncio.run(main(parsedSummaryData, headers, isForFy2024, limit))
