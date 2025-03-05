@@ -414,7 +414,7 @@ if st.button("Fetch Data"):
     st.dataframe(data=parsedSummaryData)
 
     data = []
-    limit = 150
+    limit = 250
 
     loop = get_event_loop()
     try:
